@@ -48,7 +48,7 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "5.4.5",
     "undici": "*",
-    "vite": "5.3.5",
+    "vite": "^5.4.11",
     "vite-tsconfig-paths": "^4.2.1",
     "wrangler": "^3.83.0"
   },
