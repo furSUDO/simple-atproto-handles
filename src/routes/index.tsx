@@ -6,6 +6,7 @@ import {
   type DocumentHead,
 } from "@builder.io/qwik-city";
 import { TbArrowNarrowRight } from "@qwikest/icons/tablericons";
+import { isValidHandle } from "@atproto/syntax";
 
 import { D1Orm } from "d1-orm";
 import { UserModel } from "~/modles";
@@ -28,14 +29,8 @@ export const useGetPageData = routeLoader$(async ({ url, platform }) => {
 export const useCheckUsername = routeAction$(async (data) => {
   const username = data.username.toString().toLowerCase();
   const hdlres = new HandleResolver({});
-  const regex2 =
-    /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
-  if (!regex2.test(username)) {
-    return { error: "Invalid username" };
-  }
   try {
     const did = await hdlres.resolve(username);
-    console.log(did);
 
     return { did: did };
   } catch (error) {
@@ -59,7 +54,7 @@ export const useCreateUser = routeAction$(async (data, { platform }) => {
 
   const newUser = await User.InsertOne({
     id: ulid(),
-    handle: handle,
+    handle: handle.toLowerCase(),
     did: did,
   });
   return newUser;
@@ -83,6 +78,11 @@ export default component$(() => {
   const checkProfileAction = useCheckUsername();
   const createUserAction = useCreateUser();
 
+  const hostDomain =
+    pageData.value.url.host === "localhost:5173"
+      ? "simple.handles"
+      : pageData.value.url.host;
+
   return (
     <div class="flex h-screen items-center justify-center bg-gradient-to-tr from-purple-200 to-blue-200">
       <section class="mx-auto flex min-h-[400px] max-w-md items-center justify-center rounded-lg bg-gradient-to-r from-blue-50 to-purple-100 p-8 shadow-xl duration-1000 animate-in fade-in">
@@ -92,7 +92,7 @@ export default component$(() => {
             {/* Header */}
             <div class="w-full space-y-4">
               <h1 class="text-center text-3xl font-bold text-gray-800">
-                {pageData.value.url.host}
+                {hostDomain}
               </h1>
               <p class="text-center text-lg text-gray-500">
                 Join{" "}
@@ -102,8 +102,7 @@ export default component$(() => {
                 >
                   <strong>{pageData.value.users}</strong>
                 </Link>{" "}
-                users already using {pageData.value.url.host} as their handle on
-                Bluesky!
+                users already using {hostDomain} as their handle on Bluesky!
               </p>
             </div>
             {/* Step 1: Enter current username */}
@@ -172,15 +171,14 @@ export default component$(() => {
                   value={state.newUsername}
                   onInput$={(e) => {
                     const inputValue = (e.target as HTMLInputElement).value;
-                    const sanitizedInput = inputValue.replace(
-                      `.${pageData.value.url.host}`,
-                      "",
-                    );
+                    const sanitizedInput = inputValue
+                      .replace(`.${hostDomain}`, "")
+                      .toLowerCase();
                     state.newUsername = sanitizedInput;
                   }}
                   disabled={state.step !== 2 || state.loading}
                 />
-                <span class="absolute right-3 top-1/2 -translate-y-1/2 transform text-gray-500">{`.${pageData.value.url.host}`}</span>
+                <span class="absolute right-3 top-1/2 -translate-y-1/2 transform text-gray-500">{`.${hostDomain}`}</span>
               </div>
             </div>
             {/* Step 3: Submit button */}
@@ -192,17 +190,27 @@ export default component$(() => {
                 onClick$={async () => {
                   state.loading = true;
                   state.errorNewUsername = null;
-                  const response = await createUserAction.submit({
-                    handle: state.newUsername,
-                    did: state.userDid,
-                  });
-                  state.loading = false;
+                  const newUsername =
+                    state.newUsername.toLowerCase() + `.${hostDomain}`;
 
-                  if (response.value.success) {
-                    state.success = true; // Success state
+                  if (!isValidHandle(newUsername)) {
+                    console.log(newUsername);
+                    state.errorNewUsername = "Input is not a valid handle";
+                    state.loading = false;
                   } else {
-                    state.success = false;
-                    state.errorNewUsername = response.value.error;
+                    console.log(newUsername);
+                    const response = await createUserAction.submit({
+                      handle: state.newUsername,
+                      did: state.userDid,
+                    });
+                    state.loading = false;
+
+                    if (response.value.success) {
+                      state.success = true; // Success state
+                    } else {
+                      state.success = false;
+                      state.errorNewUsername = response.value.error;
+                    }
                   }
                 }}
                 disabled={!state.newUsername || state.loading}
@@ -260,12 +268,15 @@ export default component$(() => {
   );
 });
 
-export const head: DocumentHead = {
-  title: `Simple Bluesky Handles`,
-  meta: [
-    {
-      name: "description",
-      content: "Claim your own custom handle of this domain",
-    },
-  ],
+export const head: DocumentHead = ({ resolveValue }) => {
+  const pageData = resolveValue(useGetPageData);
+  return {
+    title: `${pageData.url.host} handles`,
+    meta: [
+      {
+        name: "description",
+        content: `Join ${pageData.users} people in claiming a ${pageData.url.host} handle for Bluesky!`,
+      },
+    ],
+  };
 };
